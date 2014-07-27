@@ -9,7 +9,7 @@ This project analyzes the data from Human Action Recognition research and builds
 
 The data set consists of 19622 observations and 159 variables including the outcome, the type of action (classe). After loaded in to R, the data set has one column of user_names (class factor), one column of time (class factor), and multiple columns consisting of missing values. The missing values are indentifed by "NA" or "". The fraction of missing values in each colomn is shown in Figure 1 (upper). The user names should not have any effect on the action type base on the nature of the research. This was varified by examing the outcome of each person. Figure 1 (lower) shows the distributions of the outcome of each person are similar.
 
-<figure><img src="figure/ex.png"><figcaption>Figure 1: Exploratory analysis: Missing values and user name effect.</figcaption></figure>
+<figure><img src="figure/ex.png"><figcaption>Figure 1: Missing values and user name effect.</figcaption></figure>
 
 ## Data Preprocess
 
@@ -26,7 +26,7 @@ The training set was trained with four models: svmLinear (Supported Vector Machi
 
 ## Results
 
-The selected model (RF) was applied on the test set to report the final accuracy of the model.
+The selected model (RF) was applied on the test set to report the final accuracy of the model. The accuray of the model is 97.2%. The other statistical errors can be found below. 
 
 
 ```

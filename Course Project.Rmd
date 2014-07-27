@@ -16,7 +16,7 @@ knit_hooks$set(plot = function(x, options) {
 
 The data set consists of 19622 observations and 159 variables including the outcome, the type of action (classe). After loaded in to R, the data set has one column of user_names (class factor), one column of time (class factor), and multiple columns consisting of missing values. The missing values are indentifed by "NA" or "". The fraction of missing values in each colomn is shown in Figure 1 (upper). The user names should not have any effect on the action type base on the nature of the research. This was varified by examing the outcome of each person. Figure 1 (lower) shows the distributions of the outcome of each person are similar.
 
-```{r ex, echo = FALSE, warning = FALSE, message = FALSE, fig.height =7.5, fig.cap = "Figure 1: Exploratory analysis: Missing values and user name effect."}
+```{r ex, echo = FALSE, warning = FALSE, message = FALSE, fig.height =7.5, fig.cap = "Figure 1: Missing values and user name effect."}
 
 library(caret)
 library(randomForest)
@@ -187,7 +187,7 @@ title(main = "Model Selection", xlab = "Model Name", ylab = "Accuracy")
 
 ## Results
 
-The selected model (RF) was applied on the test set to report the final accuracy of the model.
+The selected model (RF) was applied on the test set to report the final accuracy of the model. The accuray of the model is 97.2%. The other statistical errors can be found below. 
 
 ```{r re, echo = FALSE}
 confusionMatrix(predict(M_rf$finalModel, testing[,-29]),testing[,29])
