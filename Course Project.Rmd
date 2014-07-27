@@ -1,0 +1,196 @@
+# HAR Course Project
+
+## Abstract
+This project analyzes the data from Human Action Recognition research and builds up a machine learning system to predict the type of Action. The description of the research and the data can be found on http://groupware.les.inf.puc-rio.br/har. The analysis in this project consists four parts: exploratory analysis, data preprocess, model selection and the final results. Exploratory analysis includes overview of the data which helps to decide the preprocess precedure. Data preprocess cleans the data which is suitable for training. Four types of models were trained with the training set and tested on the validation set. The best model (random forest) was selected based on the accuracy on the validation set. The final accuracy is obtained by prediction on the test set.
+
+```{r setup, echo = FALSE}
+knit_hooks$set(plot = function(x, options) {
+  paste('<figure><img src="',
+        opts_knit$get('base.url'), paste(x, collapse = '.'),
+        '"><figcaption>', options$fig.cap, '</figcaption></figure>',
+        sep = '')
+})
+```
+
+## Exploratory Analysis
+
+The data set consists of 19622 observations and 159 variables including the outcome, the type of action (classe). After loaded in to R, the data set has one column of user_names (class factor), one column of time (class factor), and multiple columns consisting of missing values. The missing values are indentifed by "NA" or "". The fraction of missing values in each colomn is shown in Figure 1 (upper). The user names should not have any effect on the action type base on the nature of the research. This was varified by examing the outcome of each person. Figure 1 (lower) shows the distributions of the outcome of each person are similar.
+
+```{r ex, echo = FALSE, warning = FALSE, message = FALSE, fig.height =7.5, fig.cap = "Figure 1: Exploratory analysis: Missing values and user name effect."}
+
+library(caret)
+library(randomForest)
+library(gbm)
+library(plyr)
+library(kernlab)
+
+OriData <- read.csv("pml-training.csv", header = TRUE, row.names = 1)
+OriTest <- read.csv("pml-testing.csv", header = TRUE, row.names = 1)
+numCase <- nrow(OriData)
+
+nacol <- sapply(OriData, function(x) sum(is.na(x)|x==""))
+NAd   <- cbind(1:159, nacol/numCase)
+
+par(mfcol= c(2,1))
+rownames(NAd) = 1:159
+
+barplot(NAd[,2], xlab = "Variable Index", ylab = "Missing Value Fraction", main = "Missing Value Detection", ylim = c(0,1.0))
+plot(OriData$user_name, OriData$classe, xlab = "user name", ylab = "classe")
+```
+
+## Data Preprocess
+
+Based on the exploratory analysis, the user name column and the columns with 95% or above of missing values are removed. Time data was converted into numeric. Variables with near zero variance were also removed. All the remaining predictors were centered at the mean and scaled with the variance. Then the whole data set was splited into training set (60%), validation set (20%), and testing set (20%). In the trainig set, the outliers were detected by examing the hist plot of each predictor and then were removed. The covariance matrix of predictors shows the necessity of PCA (Principle Component Analysis). After PCA, the predictors are ready for training.
+
+```{r dp, echo = FALSE, warning = FALSE, message = FALSE, fig.cap = "Figure 2: Demonstration of outlier treatment."}
+
+data  <- OriData[,!(nacol/numCase > 0.95)]
+data$cvtd_timestamp <- as.numeric(strptime(as.character(data$cvtd_timestamp), 
+                                format = "%d/%m/%Y %H:%M"))
+data  <- data[,-1]
+
+# Detection of non-variate/zero covariates/features
+
+nsv    <- nearZeroVar(as.matrix(data), saveMetrics = TRUE)
+data   <- data[,nsv$nzv == FALSE]
+
+rm(OriData)
+
+# Split data to training (0.6), validation (0.2), and testing (0.2) set
+
+# Caution!!! If seed is changed the parameters for PCA are also changed.
+# Thus the model needs to be re-trained 
+# If you don't want to re-train the model, the PCA preProcess (prep2) 
+# for the previous seed need to be applied to the new partitioned data
+# for the new seed
+set.seed(132563)
+# Caution!!! 
+
+
+Intrain    <- createDataPartition(data[,57], p = 0.8, list = FALSE)
+training   <- data[Intrain,]
+testing    <- data[-Intrain,]
+InValid    <- createDataPartition(training[,57], p = 0.25, list = FALSE)
+validation <- training[InValid,]
+training   <- training[-InValid,]
+coln       <- colnames(data)
+
+rm(data, Intrain, InValid)
+
+# Transform data
+
+prep1            <- preProcess(training[,-57], method = c("center","scale"))
+training[,-57]   <- predict(prep1, training[,-57])
+validation[,-57] <- predict(prep1, validation[,-57])
+testing[,-57]    <- predict(prep1, testing[,-57])
+
+par(mfcol = c(2,1))
+
+hist(training[,42], main = "Before Removing Outliers", xlab = colnames(training)[42])
+# Feature scanning to find stewed data
+
+# abnormal <- numeric(0)
+# for (i in 1:ncol(training)){
+#   hist(as.numeric(training[,i]), main = colnames(training)[i])
+#   x <- readline("1. stop 2. mark: ")
+#   if (x ==1 ) break
+#   else if (x==2) abnormal <- cbind(abnormal,i)
+# }
+
+# Remove outliers 
+
+# summary(training[,42])
+# summary(training[,35])
+# summary(training[,9])
+a <- which(training[,42] < -11)
+a <- c(a, which(training[,35] < -100))
+a <- c(a, which(training[,9]  > 8))
+training <- training[-a,]
+
+hist(training[,42], main = "After Removing Outliers", xlab = colnames(training)[42])
+
+rm(a)
+
+# Detection of correlation between features
+# If there is correlation between features (pca_condition is not 0)
+# Perform PCA
+
+comatrix       <- abs(cor(training[,-57]))
+diag(comatrix) <- 0
+pca_condition  <- length(which(comatrix > 0.8, arr.ind = F)) != 0
+
+if (pca_condition) {
+  prep2 <- preProcess(training[,-57], method = "pca", thres = 0.95)
+  training   <- cbind(predict(prep2,training[,-57]),classe = training[,57])
+  validation <- cbind(predict(prep2,validation[,-57]),classe = validation[,57])
+  testing    <- cbind(predict(prep2,testing[,-57]),classe = testing[,57])
+}
+
+rm(comatrix, pca_condition)
+
+```
+
+## Model Selection
+
+The training set was trained with four models: svmLinear (Supported Vector Machine with linear kernal), svmRadial (Support Vector Machines with Radial Kernel), gbm (Stochastic Gradient Boosting), and rf (Random Forest). The the models were applied to validation set to obain the out of sample error/accuracy. Both in sample (training set) and out of sample (validation set) accuracies for all models are shown in Figure 3. Both in sample and out of sample accuracies of the same model are similar, meaning there is no overfitting. The RF (random forest) model has the highest out of sample accuracy and thus was selected as final model.
+
+
+```{r MS, echo = FALSE, message = FALSE, warning = FALSE, fig.cap = "Figure 3: Model selection based on accuracy"}
+
+# Training with models
+
+# gbmGrid <-  expand.grid(interaction.depth = c(5, 10),n.trees = c(3,4,5)*100,shrinkage = 0.1)
+# M_gbm  <- train(classe ~., data = training, method = "gbm", verbose = FALSE, tuneGrid = gbmGrid)
+# M_svmL <- train(classe ~., data = training, method = "svmLinear")
+# M_svmR <- train(classe ~., data = training, method = "svmRadial")
+# M_rf   <- train(classe ~., data = training, method = "rf")
+
+load("M_rf.RData")
+load("M_svmL.RData")
+load("M_svmR.RData")
+load("M_gbm.RData")
+
+# In sample accuracy (training set)
+rfIn     <- max(M_rf$results$Accuracy)
+gbmIn    <- max(M_gbm$results$Accuracy)
+svmLIn   <- max(M_svmL$results$Accuracy)
+svmRIn   <- max(M_svmR$results$Accuracy)
+
+ModelNam <- 1:4
+names(ModelNam) <- c("SVM_L","SVM_R","GBM","RF")
+InSamErr <- c(svmLIn, svmRIn , gbmIn, rfIn)
+
+# Out of sample accuracy (validation set)
+rfOut    <- confusionMatrix(predict(M_rf$finalModel,
+                                    validation[,-29]),validation[,29])
+gbmOut   <- confusionMatrix(predict(M_gbm,
+                                    validation[,-29]),validation[,29])
+svmLOut  <- confusionMatrix(predict(M_svmL$finalModel,
+                                    validation[,-29]),validation[,29])
+svmROut  <- confusionMatrix(predict(M_svmR$finalModel,
+                                    validation[,-29]),validation[,29])
+
+# Construct the plot
+
+Acc      <- cbind(c(ModelNam, ModelNam), 
+                  c(InSamErr, c(svmLOut$overall[1],svmROut$overall[1],
+                                gbmOut$overall[1],rfOut$overall[1])), 
+                  rep(c(1,2), each = 4))
+
+plot(Acc, col = Acc[,3], pch = 16, cex = 1.5,ylim = c(0.5,1), 
+     xlim = c(0.5,4.5),xaxt = "n", xlab = "", ylab = "")
+axis(1,at = 1:4, labels= names(ModelNam))
+legend("bottomright",pch = 16, col = c(1,2),legend = c("In sample accuracy","Out of sample accuracy"))
+title(main = "Model Selection", xlab = "Model Name", ylab = "Accuracy")
+
+```
+
+## Results
+
+The selected model (RF) was applied on the test set to report the final accuracy of the model.
+
+```{r re, echo = FALSE}
+confusionMatrix(predict(M_rf$finalModel, testing[,-29]),testing[,29])
+```
+
+
